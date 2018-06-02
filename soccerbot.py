@@ -3,10 +3,16 @@ import json
 import os.path
 from enum import Enum
 import signal
+import sys
 import time
 import private
 import asyncio
 from concurrent.futures import ProcessPoolExecutor
+
+def sigterm_handler(_signo, _stack_frame):
+    sys.exit(0)
+
+signal.signal(signal.SIGTERM, sigterm_handler)
 
 # 17 for only WC matches, None for everything
 WC_COMPETITION = private.WC_COMPETITION
@@ -231,7 +237,9 @@ def check_for_updates():
     done_matches = []
     for match in match_list:
         current_match = match_list[match]
+
         event_list = get_match_events(current_match['idCompetition'], current_match['idSeason'], current_match['idStage'], current_match['idMatch'])
+
         for event in event_list:
             if event in current_match['events']:
                 continue # We already reported the event, skip it
@@ -287,7 +295,7 @@ def main():
         events = check_for_updates()
         for event in events:
             print(event, flush=True)
-            # send_event(event)
+            send_event(event)
         time.sleep(60)
 
 if __name__ == '__main__':
@@ -299,14 +307,14 @@ if __name__ == '__main__':
     # if private.DEBUG and private.DEBUG_WEBHOOK is not '':
         # heart_beat_task = asyncio.ensure_future(loop.run_in_executor(executor, heart_beat))
 
-    send_event("`soccerbot starting up`")
+    send_event("`soccerbot: starting up`")
 
     try:
         loop.run_forever()
     except KeyboardInterrupt:
         pass
     finally:
-        send_event("`soccerbot shutting down`")
+        send_event("`soccerbot: shutting down`")
         if main_task and not main_task.cancelled():
             main_task.cancel()
         if heart_beat_task and not heart_beat_task.cancelled():
