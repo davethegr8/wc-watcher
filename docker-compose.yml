@@ -3,3 +3,5 @@ version: "3"
 services:
   soccerbot:
     build: ./
+    volumes:
+      - .:/usr/src

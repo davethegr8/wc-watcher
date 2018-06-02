@@ -2,12 +2,14 @@ import requests
 import json
 import os.path
 from enum import Enum
+import signal
 import time
 import private
 import asyncio
 from concurrent.futures import ProcessPoolExecutor
 
-WC_COMPETITION = 17 # 17 for only WC matches
+# 17 for only WC matches, None for everything
+WC_COMPETITION = private.WC_COMPETITION
 
 FIFA_URL = 'https://api.fifa.com/api/v1'
 NOW_URL = '/live/football/now'
@@ -54,6 +56,8 @@ def get_current_matches():
     matches = []
     players = {}
     headers = {'Content-Type': 'application/json'}
+
+    print("getting current matches", flush=True)
     try:
         r = requests.get(url=FIFA_URL + NOW_URL, headers=headers)
         r.raise_for_status()
@@ -74,10 +78,10 @@ def get_current_matches():
         for entry in match['AwayTeam']['TeamName']:
             away_team_name = entry['Description']
         if not id_competition or not id_season or not id_stage or not id_match:
-            print('Invalid match information')
+            print('Invalid match information', flush=True)
             continue
 
-        matches.append({'idCompetition': id_competition, 'idSeason': id_season, 'idStage': id_stage, 'idMatch': id_match, 'homeTeamId': home_team_id, 
+        matches.append({'idCompetition': id_competition, 'idSeason': id_season, 'idStage': id_stage, 'idMatch': id_match, 'homeTeamId': home_team_id,
         'homeTeam': home_team_name, 'awayTeamId': away_team_id, 'awayTeam': away_team_name, 'events': []})
 
         for player in match['HomeTeam']['Players']:
@@ -91,7 +95,7 @@ def get_current_matches():
             for player_details in player['ShortName']:
                 player_name = player_details['Description']
             players[player_id] = player_name
-        
+
     return matches, players
 
 def get_match_events(idCompetition, idSeason, idStage, idMatch):
@@ -209,7 +213,7 @@ def load_matches():
     with open('match_list.txt', 'r') as file:
         content = file.read()
     return json.loads(content) if content else {}
-    
+
 
 def check_for_updates():
     events = []
@@ -242,19 +246,28 @@ def check_for_updates():
         del match_list[match]
 
     save_matches(match_list)
+
     return events
 
 def send_event(event, url=private.WEBHOOK_URL):
+    print("Event: ", event, flush=True)
+
     headers = {'Content-Type': 'application/json'}
-    payload = {'text': event}
+    payload = {
+        'text': event,
+        'channel': private.SLACK_CHANNEL,
+        'username': private.SLACK_USERNAME,
+        'icon_emoji': private.SLACK_AVATAR
+    }
+
     try:
         r = requests.post(url, data=json.dumps(payload), headers=headers)
         r.raise_for_status()
     except requests.exceptions.HTTPError as ex:
-        print('Failed to send message: {}'.format(ex))
+        print('Failed to send message: {}'.format(ex), flush=True)
         return
     except requests.exceptions.ConnectionError as ex:
-        print('Failed to send message: {}'.format(ex))
+        print('Failed to send message: {}'.format(ex), flush=True)
         return
 
 def heart_beat():
@@ -268,25 +281,35 @@ def heart_beat():
         time.sleep(60)
 
 def main():
+    print("main()", flush=True)
     while True:
+        print("getting events", flush=True)
         events = check_for_updates()
         for event in events:
-            send_event(event)
+            print(event, flush=True)
+            # send_event(event)
         time.sleep(60)
 
 if __name__ == '__main__':
     executor = ProcessPoolExecutor(2)
     loop = asyncio.get_event_loop()
+
     main_task = asyncio.ensure_future(loop.run_in_executor(executor, main))
-    if private.DEBUG and private.DEBUG_WEBHOOK is not '':
-        heart_beat_task = asyncio.ensure_future(loop.run_in_executor(executor, heart_beat))
+
+    # if private.DEBUG and private.DEBUG_WEBHOOK is not '':
+        # heart_beat_task = asyncio.ensure_future(loop.run_in_executor(executor, heart_beat))
+
+    send_event("`soccerbot starting up`")
+
     try:
         loop.run_forever()
     except KeyboardInterrupt:
         pass
     finally:
+        send_event("`soccerbot shutting down`")
         if main_task and not main_task.cancelled():
             main_task.cancel()
         if heart_beat_task and not heart_beat_task.cancelled():
             heart_beat_task.cancel()
         loop.close()
+
