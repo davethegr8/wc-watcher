@@ -141,13 +141,13 @@ def build_event(player_list, current_match, event):
         event_message = ':soccer: {} GOOOOAL! {} *{}:{}* {}'.format(event['time'], current_match['homeTeam'], event['home_goal'], event['away_goal'], current_match['awayTeam'])
         extraInfo = True
     elif event['type'] == EventType.YELLOW_CARD.value:
-        event_message = ':yellow_card_new: {} Yellow card.'.format(event['time'])
+        event_message = ':yellow_card: {} Yellow card.'.format(event['time'])
         extraInfo = True
     elif event['type'] == EventType.RED_CARD.value:
-        event_message = ':red_card_new: {} Red card.'.format(event['time'])
+        event_message = ':redcard1: {} Red card.'.format(event['time'])
         extraInfo = True
     elif event['type'] == EventType.DOUBLE_YELLOW.value:
-        event_message = ':yellow_card_new: :red_card_new: {} Second yellow card.'.format(event['time'])
+        event_message = ':yellow_card: :redcard1: {} Second yellow card.'.format(event['time'])
         extraInfo = True
     elif event['type'] == EventType.SUBSTITUTION.value:
         event_message = ':arrows_counterclockwise: {} Substitution for {}.'.format(event['time'], active_team)
