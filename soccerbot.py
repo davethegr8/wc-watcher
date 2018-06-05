@@ -18,6 +18,7 @@ signal.signal(signal.SIGTERM, sigterm_handler)
 WC_COMPETITION = private.WC_COMPETITION
 
 FIFA_URL = 'https://api.fifa.com/api/v1'
+# NOW_URL = '/live/football/'
 NOW_URL = '/live/football/now'
 MATCH_URL = '/timelines/{}/{}/{}/{}?language=en-US' # IdCompetition/IdSeason/IdStage/IdMatch
 PLAYER_URL = ''
@@ -65,6 +66,7 @@ def get_current_matches():
 
     print("getting current matches", flush=True)
     try:
+        print(FIFA_URL + NOW_URL, flush=True)
         r = requests.get(url=FIFA_URL + NOW_URL, headers=headers)
         r.raise_for_status()
     except requests.exceptions.HTTPError as ex:
@@ -72,8 +74,10 @@ def get_current_matches():
 
     for match in r.json()['Results']:
         id_competition = match['IdCompetition']
+
         if WC_COMPETITION and WC_COMPETITION != id_competition:
             continue
+
         id_season = match['IdSeason']
         id_stage = match['IdStage']
         id_match = match['IdMatch']
@@ -108,11 +112,14 @@ def get_match_events(idCompetition, idSeason, idStage, idMatch):
     events = {}
     headers = {'Content-Type': 'application/json'}
     match_url = FIFA_URL + MATCH_URL.format(idCompetition, idSeason, idStage, idMatch)
+
     try:
+        print('getting ' + match_url, flush=True)
         r = requests.get(match_url, headers=headers)
         r.raise_for_status()
     except requests.exceptions.HTTPError as ex:
         return events
+
     for event in r.json()['Event']:
         eId = event['EventId']
         new_event = {}
@@ -120,8 +127,8 @@ def get_match_events(idCompetition, idSeason, idStage, idMatch):
         new_event['team'] = event['IdTeam']
         new_event['player'] = event['IdPlayer']
         new_event['time'] = event['MatchMinute']
-        new_event['home_goal'] = event['HomeGoals']
-        new_event['away_goal'] = event['AwayGoals']
+        new_event['home_goal'] = event['HomeGoals'] if event['HomeGoals'] is not None else 0
+        new_event['away_goal'] = event['AwayGoals'] if event['AwayGoals'] is not None else 0
         new_event['sub'] = event['IdSubPlayer']
         new_event['period'] = event['Period']
         new_event['home_pgoals'] = event['HomePenaltyGoals']
@@ -132,80 +139,49 @@ def get_match_events(idCompetition, idSeason, idStage, idMatch):
 
 def build_event(player_list, current_match, event):
     event_message = ''
+
+    # print(event)
+    # print(current_match)
+    # print(player_list, flush=True)
+
     player = player_list.get(event['player'])
     sub_player = player_list.get(event['sub'])
     active_team = current_match['homeTeam'] if event['team'] == current_match['homeTeamId'] else current_match['awayTeam']
+
     extraInfo = False
-    if (event['type'] == EventType.GOAL_SCORED.value or event['type'] == EventType.FREE_KICK_GOAL.value
-        or event['type'] == EventType.FREE_KICK_GOAL.value):
-        event_message = ':soccer: {} GOOOOAL! {} *{}:{}* {}'.format(event['time'], current_match['homeTeam'], event['home_goal'], event['away_goal'], current_match['awayTeam'])
-        extraInfo = True
+
+    if (event['type'] == EventType.GOAL_SCORED.value):
+        return message_goal(player_list, current_match, event)
+    elif (event['type'] == EventType.FREE_KICK_GOAL.value):
+        return message_goal(player_list, current_match, event)
+    elif (event['type'] == EventType.FREE_KICK_GOAL.value):
+        return message_goal(player_list, current_match, event)
     elif event['type'] == EventType.YELLOW_CARD.value:
-        event_message = ':yellow_card: {} Yellow card.'.format(event['time'])
-        extraInfo = True
+        return message_yellow(player_list, current_match, event)
     elif event['type'] == EventType.RED_CARD.value:
-        event_message = ':redcard1: {} Red card.'.format(event['time'])
-        extraInfo = True
+        return message_red(player_list, current_match, event)
     elif event['type'] == EventType.DOUBLE_YELLOW.value:
-        event_message = ':yellow_card: :redcard1: {} Second yellow card.'.format(event['time'])
-        extraInfo = True
+        return message_second_yellow(player_list, current_match, event)
     elif event['type'] == EventType.SUBSTITUTION.value:
-        event_message = ':arrows_counterclockwise: {} Substitution for {}.'.format(event['time'], active_team)
-        if player and sub_player:
-            event_message += '\n> {} comes on for {}.'.format(sub_player, player)
+        return message_sub(player_list, current_match, event)
     elif event['type'] == EventType.MATCH_START.value:
-        period = None
-        if event['period'] == Period.FIRST_PERIOD.value:
-            event_message = ':clock12: The match between {} and {} has begun!'.format(current_match['homeTeam'], current_match['awayTeam'])
-        elif event['period'] == Period.SECOND_PERIOD.value:
-            event_message = ':clock12: The second half of the match between {} and {} has begun!'.format(current_match['homeTeam'], current_match['awayTeam'])
-        elif event['period'] == Period.PENALTY_SHOOTOUT.value:
-            event_message = ':clock12: The penalty shootout is starting between {} and {}!'.format(current_match['homeTeam'], current_match['awayTeam'])
-        else:
-            event_message = ':clock12: The match between {} and {} is starting again!'.format(current_match['homeTeam'], current_match['awayTeam'])
+        return message_halfstart(player_list, current_match, event)
     elif event['type'] == EventType.HALF_END.value:
-        period = None
-        if event['period'] == Period.FIRST_PERIOD.value:
-            period = 'first'
-        elif event['period'] == Period.SECOND_PERIOD.value:
-            period = 'second'
-        elif event['period'] == Period.PENALTY_SHOOTOUT.value:
-            event_message = ':clock1230: The penalty shootout is over.'
-        else:
-            period = 'invalid'
-            event_message = ':clock1230: End of the half. {} *{}:{}* {}.'.format(current_match['homeTeam'], event['home_goal'], event['away_goal'], current_match['awayTeam'])
-        if period is not None:
-            event_message = ':clock1230: End of the {} half. {} *{}:{}* {}.'.format(period, current_match['homeTeam'], event['home_goal'], event['away_goal'], current_match['awayTeam'])
+        return message_halfend(player_list, current_match, event)
     elif event['type'] == EventType.MATCH_END.value:
-        event_message = ':clock12: The match between {} and {} has ended. {} *{}:{}* {}.'.format(current_match['homeTeam'], current_match['awayTeam'],
-        current_match['homeTeam'], event['home_goal'], event['away_goal'], current_match['awayTeam'])
+        return message_final(player_list, current_match, event)
     elif event['type'] == EventType.OWN_GOAL.value:
-        event_message = ':soccer: {} Own Goal! {} *{}:{}* {}'.format(event['time'], current_match['homeTeam'], event['home_goal'], event['away_goal'], current_match['awayTeam'])
-        extraInfo = True
+        return message_owngoal(player_list, current_match, event)
     elif event['type'] == EventType.PENALTY_GOAL.value:
-        if event['period'] == Period.PENALTY_SHOOTOUT.value:
-            event_message = ':soccer: Penalty goal! {} *{} ({}):{} (){}* {}'.format(current_match['homeTeam'], event['home_goal'], event['home_pgoals'], event['away_goal'], event['away_pgoals'], current_match['awayTeam'])
-        else:
-            event_message = ':soccer: {} Penalty goal! {} *{}:{}* {}'.format(event['time'], current_match['homeTeam'], event['home_goal'], event['away_goal'], current_match['awayTeam'])
-        extraInfo = True
+        return message_penalty_goal(player_list, current_match, event)
     elif event['type'] == EventType.PENALTY_MISSED.value:
-        if event['period'] == Period.PENALTY_SHOOTOUT.value:
-            event_message = ':no_entry_sign: Penalty missed! {} *{} ({}):{} (){}* {}'.format(current_match['homeTeam'], event['home_goal'], event['home_pgoals'], event['away_goal'], event['away_pgoals'], current_match['awayTeam'])
-        else:
-            event_message = ':no_entry_sign: {} Penalty missed!'.format(event['time'])
-        extraInfo = True
+        return message_penalty_miss(player_list, current_match, event)
     elif EventType.has_value(event['type']):
         event_message = None
     elif private.DEBUG:
         event_message = 'Missing event information for {} vs {}: Event {}\n{}'.format(current_match['homeTeam'], current_match['awayTeam'], event['type'], event['url'])
     else:
         event_message = None
-
-    if (extraInfo):
-        if player and active_team:
-            event_message += '\n> {} ({})'.format(player, active_team)
-        elif active_team:
-            event_message += '\n> {}'.format(active_team)
 
     return event_message
 
@@ -220,6 +196,114 @@ def load_matches():
         content = file.read()
     return json.loads(content) if content else {}
 
+def message_goal(player_list, current_match, event):
+    player = player_list.get(event['player'])
+    active_team = current_match['homeTeam'] if event['team'] == current_match['homeTeamId'] else current_match['awayTeam']
+
+    if (player is not None):
+        message = '{} :soccer: Goal! Scored by {} ({})'
+        message = message.format(event['time'], player, active_team)
+    else:
+        message = '{} :soccer: Goal for {}!'
+        message = message.format(event['time'], active_team)
+
+    return message
+
+def message_owngoal(player_list, current_match, event):
+    player = player_list.get(event['player'])
+    active_team = current_match['homeTeam'] if event['team'] == current_match['homeTeamId'] else current_match['awayTeam']
+
+    event_message = '{} :soccer: Own Goal by {} ({})!'
+    return event_message.format(event['time'], player, active_team)
+
+def message_halfstart(player_list, current_match, event):
+    period = None
+    if event['period'] == Period.FIRST_PERIOD.value:
+        return '{} Kickoff!'.format(event['time'])
+    elif event['period'] == Period.SECOND_PERIOD.value:
+        return '{} Second half kickoff!'.format(event['time'])
+    elif event['period'] == Period.PENALTY_SHOOTOUT.value:
+        return '{} The penalty shootout is starting'.format(event['time'])
+    else:
+        return '{} {} vs {} has restarted!'.format(event['time'], current_match['homeTeam'], current_match['awayTeam'])
+
+def message_halfend(player_list, current_match, event):
+    period = None
+    if event['period'] == Period.FIRST_PERIOD.value:
+        period = 'first'
+    elif event['period'] == Period.SECOND_PERIOD.value:
+        period = 'second'
+    elif event['period'] == Period.PENALTY_SHOOTOUT.value:
+        event_message = '{} The penalty shootout is over.'.format(event['time'])
+    else:
+        period = 'invalid'
+        event_message = '{} End of the half.'.format(event['time'])
+    if period is not None:
+        event_message = '{} End of the {} half.'.format(event['time'], period)
+
+    return event_message
+
+def message_final(player_list, current_match, event):
+    message = 'Final'
+    return message.format()
+
+def message_yellow(player_list, current_match, event):
+    player = player_list.get(event['player'])
+    active_team = current_match['homeTeam'] if event['team'] == current_match['homeTeamId'] else current_match['awayTeam']
+
+    message = '{} ' + private.YELLOW_CARD_EMOJI + ' Yellow card for {} ({})';
+
+    return message.format(event['time'], player, active_team)
+
+def message_second_yellow(player_list, current_match, event):
+    player = player_list.get(event['player'])
+    active_team = current_match['homeTeam'] if event['team'] == current_match['homeTeamId'] else current_match['awayTeam']
+
+    message = '{} ' + private.YELLOW_CARD_EMOJI + ' ' + private.RED_CARD_EMOJI + ' Second yellow card for {} ({})';
+
+    return message.format(event['time'], player, active_team)
+
+def message_red(player_list, current_match, event):
+    player = player_list.get(event['player'])
+    active_team = current_match['homeTeam'] if event['team'] == current_match['homeTeamId'] else current_match['awayTeam']
+
+    message = '{} ' + private.RED_CARD_EMOJI + ' Red card for {} ({})';
+
+    return message.format(event['time'], player, active_team)
+
+def message_sub(player_list, current_match, event):
+    player = player_list.get(event['player'])
+    sub_player = player_list.get(event['sub'])
+    active_team = current_match['homeTeam'] if event['team'] == current_match['homeTeamId'] else current_match['awayTeam']
+
+    event_message = '{} Substitution for {}.'.format(event['time'], active_team)
+
+    if player and sub_player:
+        event_message += ' :arrow_left: Out: {} :arrow_right: In: {}'.format(player, sub_player)
+
+    return event_message
+
+def message_penalty_goal(player_list, current_match, event):
+    player = player_list.get(event['player'])
+    active_team = current_match['homeTeam'] if event['team'] == current_match['homeTeamId'] else current_match['awayTeam']
+
+    if event['period'] == Period.PENALTY_SHOOTOUT.value:
+        event_message = ':soccer: Penalty goal for {}!'.format(active_team)
+    else:
+        event_message = '{} :soccer: Penalty goal for {}!'.format(event['time'], active_team)
+
+    return event_message
+
+def message_penalty_miss(player_list, current_match, event):
+    player = player_list.get(event['player'])
+    active_team = current_match['homeTeam'] if event['team'] == current_match['homeTeamId'] else current_match['awayTeam']
+
+    if event['period'] == Period.PENALTY_SHOOTOUT.value:
+        event_message = ':no_entry_sign: Penalty missed by {}!'.format(active_team)
+    else:
+        event_message = '{} :no_entry_sign: Penalty missed by {}!'.format(event['time'], active_team)
+
+    return event_message
 
 def check_for_updates():
     events = []
@@ -241,15 +325,30 @@ def check_for_updates():
         event_list = get_match_events(current_match['idCompetition'], current_match['idSeason'], current_match['idStage'], current_match['idMatch'])
 
         for event in event_list:
+            current_event = event_list[event]
+
+            # debugging
             if event in current_match['events']:
                 continue # We already reported the event, skip it
-            event_notification = build_event(player_list, current_match, event_list[event])
+
+            event_notification = build_event(player_list, current_match, current_event)
+
             current_match['events'].append(event)
             if not event_notification is None:
+                print(event_notification, flush=True)
+
+                if current_event['period'] == Period.PENALTY_SHOOTOUT.value:
+                    event_notification += ' {} {} ({}):{} ({}) {}'.format(current_match['homeTeam'], event['home_goal'], event['home_pgoals'], event['away_goal'], event['away_pgoals'], current_match['awayTeam'])
+                else:
+                    event_notification += ' {} {}:{} {}'.format(current_match['homeTeam'], current_event['home_goal'], current_event['away_goal'], current_match['awayTeam'])
+
+                print(event_notification, flush=True)
+
                 events.append(event_notification)
-            if event_list[event]['type'] == EventType.MATCH_END.value:
+            if current_event['type'] == EventType.MATCH_END.value:
                 done_matches.append(match)
 
+    # debugging
     for match in done_matches:
         del match_list[match]
 
@@ -259,6 +358,9 @@ def check_for_updates():
 
 def send_event(event, url=private.WEBHOOK_URL):
     print("Event: ", event, flush=True)
+
+    with open('events.txt', 'a') as file:
+        file.write(event + "\n")
 
     headers = {'Content-Type': 'application/json'}
     payload = {
@@ -306,6 +408,9 @@ if __name__ == '__main__':
 
     # if private.DEBUG and private.DEBUG_WEBHOOK is not '':
         # heart_beat_task = asyncio.ensure_future(loop.run_in_executor(executor, heart_beat))
+
+    with open('events.txt', 'w') as file:
+        file.write("")
 
     send_event("`soccerbot: starting up`")
 
