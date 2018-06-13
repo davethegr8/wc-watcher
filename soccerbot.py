@@ -5,6 +5,7 @@ from enum import Enum
 import signal
 import sys
 import time
+from datetime import datetime
 import private
 import asyncio
 from concurrent.futures import ProcessPoolExecutor
@@ -64,9 +65,9 @@ def get_current_matches():
     players = {}
     headers = {'Content-Type': 'application/json'}
 
-    print("getting current matches", flush=True)
+    print(str(datetime.now()), "getting current matches", flush=True)
     try:
-        print(FIFA_URL + NOW_URL, flush=True)
+        # print(FIFA_URL + NOW_URL, flush=True)
         r = requests.get(url=FIFA_URL + NOW_URL, headers=headers)
         r.raise_for_status()
     except requests.exceptions.HTTPError as ex:
@@ -114,7 +115,7 @@ def get_match_events(idCompetition, idSeason, idStage, idMatch):
     match_url = FIFA_URL + MATCH_URL.format(idCompetition, idSeason, idStage, idMatch)
 
     try:
-        print('getting ' + match_url, flush=True)
+        print(str(datetime.now()), 'getting ' + match_url, flush=True)
         r = requests.get(match_url, headers=headers)
         r.raise_for_status()
     except requests.exceptions.HTTPError as ex:
@@ -335,16 +336,13 @@ def check_for_updates():
 
             current_match['events'].append(event)
             if not event_notification is None:
-                print(event_notification, flush=True)
-
                 if current_event['period'] == Period.PENALTY_SHOOTOUT.value:
                     event_notification += ' {} {} ({}):{} ({}) {}'.format(current_match['homeTeam'], event['home_goal'], event['home_pgoals'], event['away_goal'], event['away_pgoals'], current_match['awayTeam'])
                 else:
                     event_notification += ' {} {}:{} {}'.format(current_match['homeTeam'], current_event['home_goal'], current_event['away_goal'], current_match['awayTeam'])
 
-                print(event_notification, flush=True)
-
                 events.append(event_notification)
+
             if current_event['type'] == EventType.MATCH_END.value:
                 done_matches.append(match)
 
@@ -357,7 +355,7 @@ def check_for_updates():
     return events
 
 def send_event(event, url=private.WEBHOOK_URL):
-    print("Event: ", event, flush=True)
+    print(str(datetime.now()), "send_event()", event, flush=True)
 
     with open('events.txt', 'a') as file:
         file.write(event + "\n")
@@ -381,6 +379,8 @@ def send_event(event, url=private.WEBHOOK_URL):
         return
 
 def heart_beat():
+    print(str(datetime.now()), 'heartbeat', flush=True)
+
     count = 0
     send_event('Coming up', url=private.DEBUG_WEBHOOK)
     while True:
@@ -393,10 +393,10 @@ def heart_beat():
 def main():
     print("main()", flush=True)
     while True:
-        print("getting events", flush=True)
+        print(str(datetime.now()), "getting events", flush=True)
         events = check_for_updates()
         for event in events:
-            print(event, flush=True)
+            # print(event, flush=True)
             send_event(event)
         time.sleep(60)
 
@@ -407,7 +407,7 @@ if __name__ == '__main__':
     main_task = asyncio.ensure_future(loop.run_in_executor(executor, main))
 
     # if private.DEBUG and private.DEBUG_WEBHOOK is not '':
-        # heart_beat_task = asyncio.ensure_future(loop.run_in_executor(executor, heart_beat))
+    #     heart_beat_task = asyncio.ensure_future(loop.run_in_executor(executor, heart_beat))
 
     with open('events.txt', 'w') as file:
         file.write("")
