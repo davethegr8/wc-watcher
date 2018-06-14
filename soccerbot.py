@@ -76,7 +76,8 @@ def get_current_matches():
     for match in r.json()['Results']:
         id_competition = match['IdCompetition']
 
-        if WC_COMPETITION and WC_COMPETITION != id_competition:
+        # print(str(WC_COMPETITION), str(id_competition), str(WC_COMPETITION) != str(id_competition), flush=True)
+        if str(WC_COMPETITION) and str(WC_COMPETITION) != str(id_competition):
             continue
 
         id_season = match['IdSeason']
@@ -280,7 +281,7 @@ def message_sub(player_list, current_match, event):
     event_message = '{} Substitution for {}.'.format(event['time'], active_team)
 
     if player and sub_player:
-        event_message += ' :arrow_left: Out: {} :arrow_right: In: {}'.format(player, sub_player)
+        event_message += ' :arrow_left: Out: {} :arrow_right: In: {}'.format(sub_player, player)
 
     return event_message
 
