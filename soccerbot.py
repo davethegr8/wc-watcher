@@ -413,14 +413,14 @@ if __name__ == '__main__':
     with open('events.txt', 'w') as file:
         file.write("")
 
-    send_event("`soccerbot: starting up`")
+    # send_event("`soccerbot: starting up`")
 
     try:
         loop.run_forever()
     except KeyboardInterrupt:
         pass
     finally:
-        send_event("`soccerbot: shutting down`")
+        # send_event("`soccerbot: shutting down`")
         if main_task and not main_task.cancelled():
             main_task.cancel()
         if heart_beat_task and not heart_beat_task.cancelled():
