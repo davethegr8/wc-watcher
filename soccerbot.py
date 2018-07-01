@@ -7,8 +7,6 @@ import sys
 import time
 from datetime import datetime
 import private
-import asyncio
-from concurrent.futures import ProcessPoolExecutor
 
 def sigterm_handler(_signo, _stack_frame):
     sys.exit(0)
@@ -371,6 +369,7 @@ def send_event(event, url=private.WEBHOOK_URL):
 
     try:
         r = requests.post(url, data=json.dumps(payload), headers=headers)
+        # print(r.json(), flush=True)
         r.raise_for_status()
     except requests.exceptions.HTTPError as ex:
         print('Failed to send message: {}'.format(ex), flush=True)
@@ -379,20 +378,10 @@ def send_event(event, url=private.WEBHOOK_URL):
         print('Failed to send message: {}'.format(ex), flush=True)
         return
 
-def heart_beat():
-    print(str(datetime.now()), 'heartbeat', flush=True)
-
-    count = 0
-    send_event('Coming up', url=private.DEBUG_WEBHOOK)
-    while True:
-        count = count + 1
-        if count >= 60:
-            count = 0
-            send_event('Health ping', url=private.DEBUG_WEBHOOK)
-        time.sleep(60)
 
 def main():
     print("main()", flush=True)
+
     while True:
         print(str(datetime.now()), "getting events", flush=True)
         events = check_for_updates()
@@ -401,29 +390,19 @@ def main():
             send_event(event)
         time.sleep(60)
 
+    print("ohno", flush=True)
+
 if __name__ == '__main__':
-    executor = ProcessPoolExecutor(2)
-    loop = asyncio.get_event_loop()
-
-    main_task = asyncio.ensure_future(loop.run_in_executor(executor, main))
-
-    # if private.DEBUG and private.DEBUG_WEBHOOK is not '':
-    #     heart_beat_task = asyncio.ensure_future(loop.run_in_executor(executor, heart_beat))
-
     with open('events.txt', 'w') as file:
         file.write("")
 
     # send_event("`soccerbot: starting up`")
 
     try:
-        loop.run_forever()
-    except KeyboardInterrupt:
+        main()
+    except:
         pass
     finally:
         # send_event("`soccerbot: shutting down`")
-        if main_task and not main_task.cancelled():
-            main_task.cancel()
-        if heart_beat_task and not heart_beat_task.cancelled():
-            heart_beat_task.cancel()
-        loop.close()
+        pass
 
